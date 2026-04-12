@@ -1,7 +1,7 @@
 const {WebSocketServer} = require("ws");
 //const{handleConnection} = require("../src/socket/handler")
 const wss = new WebSocketServer({port: 8080});
-// wss.on('connection, handleConnection);
+// wss.on('connection', handleConnection);
 
 wss.on('connection', function connection(ws){
     console.log("Client Connected");
