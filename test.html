@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html>
+<body>
+    <button onclick="sendInit()">1. Send Init</button>
+    <button onclick="sendAudio()">2. Send Audio</button>
+    <pre id="log"></pre>
+
+    <script>
+        const ws = new WebSocket('ws://localhost:8080');
+        const log = document.getElementById('log');
+
+        ws.onopen = () => append('Connected');
+        ws.onmessage = (e) => append('Received: ' + e.data);
+        ws.onerror = (e) => append('Error: ' + e);
+        ws.onclose = () => append('Disconnected');
+
+        function append(msg) {
+            log.textContent += msg + '\n';
+        }
+
+        function sendInit() {
+            ws.send(JSON.stringify({
+                type: 'init',
+                sourceLang: 'spa_Latn',
+                targetLang: 'eng_Latn',
+            }));
+        }
+
+        async function sendAudio() {
+    const response = await fetch('test.mp3?t=' + Date.now());
+    const buffer = await response.arrayBuffer();
+    ws.send(buffer);
+}
+    </script>
+</body>
+</html>
