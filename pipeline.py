@@ -1,8 +1,11 @@
+# imports:
+# !pip install faster-whisper transformers peft gtts
+
 # pipeline for handling transcription, translation, and TTS in a single flow
 import sys
 import json
 from faster_whisper import WhisperModel
-from transformers import AutoModelForSeq2SeqLM, AutoTokenizer, pipeline as hf_pipeline
+from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 from peft import PeftModel
 from gtts import gTTS
 
@@ -15,8 +18,6 @@ NLLB_TO_GTTS = {
 }
 
 # --- Loading Models Once ---
-# This is crucial for performance, as loading models can be time-consuming.
-# After models are loaded, the server should send requests to the pipeline for processing.
 print("Loading transcription model...", file=sys.stderr)
 whisper_model = WhisperModel("distil-large-v3", device="cpu", compute_type="int8")
 
@@ -26,26 +27,19 @@ base_model = AutoModelForSeq2SeqLM.from_pretrained("facebook/nllb-200-distilled-
 lora_model = PeftModel.from_pretrained(base_model, "rob-wav/nllb-multi-lora-adapter-v2")
 lora_model.eval()
 
-translator = hf_pipeline(
-    "translation",
-    model=lora_model,
-    tokenizer=tokenizer,
-    max_length=512,
-)
+def translate(text, source_lang, target_lang):
+    inputs = tokenizer(text, return_tensors="pt", padding=True, truncation=True, max_length=512)
+    target_lang_id = tokenizer.convert_tokens_to_ids(target_lang)
+    outputs = lora_model.generate(
+        **inputs,
+        forced_bos_token_id=target_lang_id,
+        max_length=512
+    )
+    return tokenizer.batch_decode(outputs, skip_special_tokens=True)[0]
 
 print("Pipeline ready", file=sys.stderr)
 sys.stderr.flush()
 
-
-# The JSON request format should be:
-#
-# {
-#     "audio_file": "audio.mp3",
-#     "source_lang": "<source_lang_code>",  # e.g., "eng_Latn"
-#     "target_lang": "<target_lang_code>",  # e.g., "spa_Latn"
-#     "output_file": "output.mp3"
-# }
-#
 # --- Request Loop ---
 for line in sys.stdin:
     try:
@@ -64,8 +58,7 @@ for line in sys.stdin:
         full_text = " ".join([segment.text.strip() for segment in segments])
 
         # Translate
-        result = translator(full_text, src_lang=source_lang, tgt_lang=target_lang)
-        translated_text = result[0]["translation_text"]
+        translated_text = translate(full_text, source_lang, target_lang)
 
         # Synthesize
         gtts_lang = NLLB_TO_GTTS.get(target_lang, "en")
