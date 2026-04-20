@@ -19,7 +19,7 @@ NLLB_TO_GTTS = {
 
 # --- Loading Models Once ---
 print("Loading transcription model...", file=sys.stderr)
-whisper_model = WhisperModel("medium", device="cpu", compute_type="int8")
+whisper_model = WhisperModel("large-v3", device="cpu", compute_type="int8")
 
 print("Loading translation model...", file=sys.stderr)
 tokenizer = AutoTokenizer.from_pretrained("facebook/nllb-200-distilled-600M")
