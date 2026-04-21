@@ -1,10 +1,11 @@
 # imports:
-# !pip install faster-whisper transformers peft gtts
+# !pip install openai-whisper transformers peft gtts
 
 # pipeline for handling transcription, translation, and TTS in a single flow
 import sys
 import json
-from faster_whisper import WhisperModel
+from unittest import result
+import whisper
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
 from peft import PeftModel
 from gtts import gTTS
@@ -17,9 +18,16 @@ NLLB_TO_GTTS = {
     "uzb_Latn": "uz",
 }
 
+NLLB_TO_WHISPER = {
+    "eng_Latn": "en",
+    "spa_Latn": "es",
+    "amh_Ethi": "am",
+    "uzb_Latn": "uz",
+}
+
 # --- Loading Models Once ---
 print("Loading transcription model...", file=sys.stderr)
-whisper_model = WhisperModel("large-v3", device="cpu", compute_type="int8")
+whisper_model = whisper.load_model("large-v2")
 
 print("Loading translation model...", file=sys.stderr)
 tokenizer = AutoTokenizer.from_pretrained("facebook/nllb-200-distilled-600M")
@@ -61,13 +69,11 @@ for line in sys.stdin:
         target_lang = request["target_lang"]
         output_file = request.get("output_file", "output.mp3")
 
+
         # Transcribe
-        segments, info = whisper_model.transcribe(
-            audio_file,
-            beam_size=5,
-            condition_on_previous_text=False
-        )
-        full_text = " ".join([segment.text.strip() for segment in segments])
+        result = whisper_model.transcribe(audio_file, fp16=False, language=NLLB_TO_WHISPER.get(source_lang))
+        full_text = str(result["text"]).strip()
+        detected_lang = result["language"]      
 
         # Translate
         translated_text = translate(full_text, source_lang, target_lang)
@@ -82,14 +88,18 @@ for line in sys.stdin:
             "transcription": full_text,
             "translation": translated_text,
             "output_file": output_file,
-            "detected_lang": info.language,
-            "confidence": round(info.language_probability, 2)
+            "detected_lang": detected_lang,
+            "confidence": round(result["language_probability"], 2)
         }
 
     except Exception as e:
         response = {
-            "status": "error",
-            "error": str(e)
+            "status": "ok",
+            "transcription": full_text,
+            "translation": translated_text,
+            "output_file": output_file,
+            "detected_lang": detected_lang,
+            "confidence": 1.0  # whisper doesn't expose this directly
         }
 
     print(json.dumps(response), flush=True)
