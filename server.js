@@ -1,7 +1,7 @@
 const { WebSocketServer } = require("ws");
 const { spawn } = require("child_process");
 const readline = require("readline");
-const { handleConnection } = require("../src/socket/handler");
+const { handleConnection } = require("./socket/handler");
 
 const pipelineState = {
     process: null,
