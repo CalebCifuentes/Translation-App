@@ -5,6 +5,7 @@
 //  Created by Noah Kifle on 3/10/26.
 //
 
+
 import SwiftUI
 
 // MARK: — Settings Model
@@ -160,18 +161,25 @@ struct SettingsView: View {
     }
 }
 
+
+
 // MARK: — Main Content View
 struct ContentView: View {
     @State private var sourceText: String = ""
-    @State private var translatedText: String = ""
     @State private var sourceLanguage: String = "English"
     @State private var targetLanguage: String = "Uzbek"
     @State private var isRecordingSource = false
     @State private var swapRotation: Double = 0
-    @State private var isSpeaking = false
     @State private var isSaved = false
     @State private var showSettings = false
     @State private var settings = AppSettings()
+
+    @StateObject private var translationService = TranslationService()
+    @StateObject private var recorder = SpeechRecorder()
+
+    // Derived from service — no separate @State needed
+    var translatedText: String { translationService.translatedText }
+    var isSpeaking: Bool { translationService.isSpeaking }
 
     let languages = ["English", "Spanish", "Uzbek", "Amharic"]
     let maxCharacters = 1000
@@ -285,8 +293,10 @@ struct ContentView: View {
                     .background(Color(.systemBackground))
                     .cornerRadius(16)
                     .shadow(color: .black.opacity(0.04), radius: 4, y: 2)
+                    
+                    
 
-                    // MARK: — Translate & Mic buttons
+                    // MARK: — Translate & Mic Buttons
                     HStack(spacing: 12) {
                         Button(action: {
                             if settings.hapticFeedback {
@@ -305,9 +315,18 @@ struct ContentView: View {
                         }
 
                         Button(action: {
-                            isRecordingSource.toggle()
                             if settings.hapticFeedback {
                                 UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                            }
+                            isRecordingSource.toggle()
+                            if isRecordingSource {
+                                try? recorder.startRecording()
+                            } else {
+                                if let audioData = recorder.stopRecording() {
+                                    translationService.connect(sourceLang: sourceLanguage,
+                                                               targetLang: targetLanguage)
+                                    translationService.sendAudio(audioData)
+                                }
                             }
                         }) {
                             ZStack {
@@ -327,6 +346,7 @@ struct ContentView: View {
                         .animation(.spring(response: 0.3), value: isRecordingSource)
                     }
 
+                    // MARK: — Recording Indicator
                     if isRecordingSource {
                         HStack(spacing: 4) {
                             ForEach(0..<5) { i in
@@ -340,6 +360,41 @@ struct ContentView: View {
                                 .font(.caption)
                                 .foregroundColor(.red)
                         }
+                        .transition(.opacity)
+                    }
+
+                    // MARK: — Processing Indicator
+                    if translationService.isProcessing {
+                        HStack(spacing: 8) {
+                            ProgressView()
+                                .scaleEffect(0.8)
+                            Text("Translating…")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                        .transition(.opacity)
+                    }
+
+                    // MARK: — Error Banner
+                    if let errorMsg = translationService.errorMessage {
+                        HStack {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .foregroundColor(.orange)
+                            Text(errorMsg)
+                                .font(.caption)
+                                .foregroundColor(.orange)
+                            Spacer()
+                            Button(action: {
+                                translationService.errorMessage = nil
+                            }) {
+                                Image(systemName: "xmark")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+                        .padding(10)
+                        .background(Color.orange.opacity(0.1))
+                        .cornerRadius(10)
                         .transition(.opacity)
                     }
 
@@ -394,9 +449,13 @@ struct ContentView: View {
 
                         HStack(spacing: 10) {
                             Button(action: {
-                                isSpeaking.toggle()
                                 if settings.hapticFeedback {
                                     UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                                }
+                                // Audio is played automatically after translation.
+                                // Tapping again replays if not currently speaking.
+                                if !isSpeaking, !translatedText.isEmpty {
+                                    translateText()
                                 }
                             }) {
                                 Label(isSpeaking ? "Speaking…" : "Speak",
@@ -494,9 +553,15 @@ struct ContentView: View {
 
     func translateText() {
         guard !sourceText.isEmpty else { return }
-        translatedText = "[Translated] " + sourceText
         isSaved = false
-        isSpeaking = false
+
+        translationService.connect(sourceLang: sourceLanguage,
+                                   targetLang: targetLanguage)
+        Task {
+            await translationService.translateText(sourceText,
+                                                   from: sourceLanguage,
+                                                   to: targetLanguage)
+        }
     }
 
     func copyText() {
@@ -506,7 +571,12 @@ struct ContentView: View {
 
     func shareText() {
         guard !translatedText.isEmpty else { return }
-        // Wire up UIActivityViewController here
+        let av = UIActivityViewController(activityItems: [translatedText],
+                                          applicationActivities: nil)
+        if let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+           let root = scene.windows.first?.rootViewController {
+            root.present(av, animated: true)
+        }
     }
 }
 
