@@ -52,7 +52,7 @@ class TranslationService: NSObject, ObservableObject {
     // ── Config ────────────────────────────────────────────────────────
     // Use your Mac's LAN IP when testing on a real iPhone (not localhost)
     // Find it by running: ipconfig getifaddr en0
-    private let serverURL = URL(string: "ws://10.13.8.105:8080")!
+    private let serverURL = URL(string: "wss://translation-app-production-d9dc.up.railway.app")!
 
     override init() {
         super.init()
