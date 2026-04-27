@@ -4,8 +4,8 @@ nixPkgs = ["python312", "nodejs_22", "ffmpeg", "zlib"]
 [phases.install]
 cmds = [
   "npm ci",
-  "python3 -m ensurepip --upgrade",
-  "python3 -m pip install faster-whisper transformers peft gtts"
+  "python3 -m venv /app/.venv",
+  "/app/.venv/bin/pip install faster-whisper transformers peft gtts"
 ]
 
 [start]
