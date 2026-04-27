@@ -14,7 +14,7 @@ function startPipeline() {
         //pipelineState.process = spawn('python3', ['pipeline.py']);
 
         //should check if system platform is windows or mac
-        pythonSystem = process.platform === "win32" ? ".venv\\Scripts\\python.exe" : ".venv/bin/python3";
+        pythonSystem = process.platform === "win32" ? "python3" : "python3";
         pipelineState.process = spawn(pythonSystem, ['pipeline.py']);
 
         const rl = readline.createInterface({ input: pipelineState.process.stdout });

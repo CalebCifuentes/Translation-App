@@ -1,0 +1,8 @@
+[phases.setup]
+nixPkgs = ["python312", "nodejs_22", "ffmpeg", "zlib"]
+
+[phases.install]
+cmds = ["npm ci", "pip install faster-whisper transformers peft gtts"]
+
+[start]
+cmd = "node server.js"
