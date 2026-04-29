@@ -48,11 +48,12 @@ class TranslationService: NSObject, ObservableObject {
     private var isReady = false
     private var pendingAudioData: Data?
     private var audioPlayer: AVAudioPlayer?
+    private var pendingTextPayload: String?
 
     // ── Config ────────────────────────────────────────────────────────
     // Use your Mac's LAN IP when testing on a real iPhone (not localhost)
     // Find it by running: ipconfig getifaddr en0
-    private let serverURL = URL(string: "wss://translation-app-production-d9dc.up.railway.app")!
+    private let serverURL = URL(string: "ws://10.13.23.198:8080")!
 
     override init() {
         super.init()
@@ -102,11 +103,19 @@ class TranslationService: NSObject, ObservableObject {
     }
 
     // MARK: Translate Plain Text (text-only fallback)
-    func translateText(_ text: String,
-                       from source: String,
-                       to target: String) async {
-        // Placeholder — replace with HTTP endpoint if you add one
-        translatedText = "[Translated] \(text)"
+    func translateText(_ text: String, from source: String, to target: String) async {
+        isProcessing = true
+        let payload: [String: String] = ["type": "text", "text": text]
+        guard let jsonData = try? JSONEncoder().encode(payload),
+              let json = String(data: jsonData, encoding: .utf8) else { return }
+
+        guard isReady else {
+            pendingTextPayload = json   // buffer it until "ready" arrives
+            return
+        }
+        webSocketTask?.send(.string(json)) { [weak self] error in
+            if let error { self?.handleError(error) }
+        }
     }
 
     // MARK: Play Audio
@@ -150,6 +159,13 @@ class TranslationService: NSObject, ObservableObject {
                     pendingAudioData = nil
                     sendAudio(pending)
                 }
+                if let pending = pendingTextPayload {   // ADD THIS
+                        pendingTextPayload = nil
+                        webSocketTask?.send(.string(pending)) { [weak self] error in
+                            if let error { self?.handleError(error) }
+                        }
+                    }
+                
             case "translation":
                 isProcessing = false
                 translatedText  = response.translation ?? ""
