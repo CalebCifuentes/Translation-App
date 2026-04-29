@@ -53,13 +53,16 @@ function handleMessages(ws, msg) {
                 })
             );
             return;
-        }
+        }  
         ws.session.sourceLang = msg.sourceLang;
         ws.session.targetLang = msg.targetLang;
         ws.session.isReady = true;
         console.log(`Languages set: ${msg.sourceLang} --> ${msg.targetLang}`);
         ws.send(JSON.stringify({ type: "ready" }));
-    } else {
+    } 
+    else if(msg.type === "text"){
+            console.log("Received Text", msg.text);
+    }else {
         console.warn("Unknown message type:", msg.type);
     }
 }

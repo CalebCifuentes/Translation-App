@@ -61,6 +61,11 @@ function runPipeline(audioFile, sourceLang, targetLang, outputFile) {
 
 startPipeline().then(() => {
     const wss = new WebSocketServer({ port: 8080 });
-    wss.on('connection', (ws) => handleConnection(ws, runPipeline));
+    wss.on('connection', (ws, req) => {
+    console.log("Client connected from:", req.socket.remoteAddress);
+    handleConnection(ws, runPipeline);
+    });
+    //handleConnection(ws, runPipeline));
     console.log("Running server on ws://localhost:8080");
+    //console.log("Client connected from:", req.socket.remoteAddress);
 });
