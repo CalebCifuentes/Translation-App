@@ -26,7 +26,7 @@ function handleConnection(ws, runPipeline) {
         } else {
             try {
                 const msg = JSON.parse(data.toString());
-                handleMessages(ws, msg);
+                handleMessages(ws, msg, runPipeline);
             } catch (e) {
                 console.error("BAD JSON:", e.message);
             }
@@ -43,7 +43,7 @@ function handleConnection(ws, runPipeline) {
     });
 }
 
-function handleMessages(ws, msg) {
+async function handleMessages(ws, msg, runPipeline) {
     if (msg.type === "init") {
         if (!msg.sourceLang || !msg.targetLang) {
             ws.send(
@@ -59,13 +59,44 @@ function handleMessages(ws, msg) {
         ws.session.isReady = true;
         console.log(`Languages set: ${msg.sourceLang} --> ${msg.targetLang}`);
         ws.send(JSON.stringify({ type: "ready" }));
-    } 
-    else if(msg.type === "text"){
-            console.log("Received Text", msg.text);
+    }  else if(msg.type === "text"){
+        if (!ws.session.isReady) {
+            ws.send(JSON.stringify({ type: "error", message: "Session not ready" }));
+            return;
+        }
+        if (ws.session.isProcessing) {
+            ws.send(JSON.stringify({ type: "error", message: "Already processing, please wait" }));
+            return;
+        }
+
+        ws.session.isProcessing = true;
+        try {
+            const result = await runPipeline(
+                null,                    // pass text directly
+                ws.session.sourceLang,
+                ws.session.targetLang,
+                null,
+                msg.text                        // no audio output needed for text
+            );
+            ws.send(JSON.stringify({
+                type: "translation",
+                transcription: msg.text,
+                translation: result.translation,
+                detected_lang: result.detected_lang,
+                confidence: result.confidence,
+                audio: result.audio ?? null,
+            }));
+        } catch (err) {
+            console.error("Text translation failed:", err.message);
+            ws.send(JSON.stringify({ type: "error", message: "Translation failed" }));
+        } finally {
+            ws.session.isProcessing = false;
+        }
     }else {
         console.warn("Unknown message type:", msg.type);
     }
 }
+
 
 async function processAudio(ws, data, runPipeline) {
     const rawDir = path.join(__dirname, "../temp/raw");
@@ -112,7 +143,8 @@ async function processAudio(ws, data, runPipeline) {
             ws.session.targetLang,
             outputPath
         );
-
+        console.log(sourceLang);
+        console.log(targetLang);
         // Step 3: Read the output mp3 and encode as base64 so the iPhone can play it
         const audioBuffer = fs.readFileSync(outputPath);
         const audioBase64 = audioBuffer.toString("base64");

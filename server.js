@@ -41,7 +41,7 @@ function startPipeline() {
     });
 }
 
-function runPipeline(audioFile, sourceLang, targetLang, outputFile) {
+function runPipeline(audioFile, sourceLang, targetLang, outputFile, text=null) {
     return new Promise((resolve, reject) => {
         if (!pipelineState.ready) return reject(new Error('Pipeline not ready'));
 
@@ -52,10 +52,12 @@ function runPipeline(audioFile, sourceLang, targetLang, outputFile) {
 
         pipelineState.process.stdin.write(JSON.stringify({
             audio_file: audioFile,
+            text: text,
             source_lang: sourceLang,
             target_lang: targetLang,
             output_file: outputFile
         }) + '\n');
+            console.log("Sending to pipeline:", { audioFile, sourceLang, targetLang, outputFile, text });
     });
 }
 
