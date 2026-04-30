@@ -10,12 +10,6 @@ import whisper
 from transformers import AutoModelForSeq2SeqLM, AutoTokenizer, VitsModel, VitsTokenizer
 from peft import PeftModel
 
-'''
-from faster_whisper import WhisperModel
-from transformers import AutoModelForSeq2SeqLM, AutoTokenizer
-from peft import PeftModel
-from gtts import gTTS
-'''
 # Mapping from NLLB language codes to gTTS language codes for TTS synthesis.
 NLLB_TO_WHISPER = {
     "eng_Latn": "en",
@@ -46,7 +40,10 @@ LANG_TO_NLLB = {
 }
 
 def to_nllb_code(lang):
-    return LANG_TO_NLLB.get(lang.lower().strip())
+    lang = lang.lower().strip()
+    if lang in LANG_TO_NLLB.values():
+        return lang
+    return LANG_TO_NLLB.get(lang)
 
 
 _model_cache = {}
@@ -106,16 +103,6 @@ def translate(text, source_lang, target_lang):
             src_lang = source_lang
             )
         
-        #tokenizer.src_lang = source_lang
-        '''
-        inputs = tokenizer(
-            sentence,
-            return_tensors="pt",
-            padding=True,
-            truncation=True,
-            max_length=1024
-        )
-        '''
 
         target_lang_id = nllb_tokenizer.convert_tokens_to_ids(target_lang)
 
@@ -134,28 +121,6 @@ def translate(text, source_lang, target_lang):
 
     return ' '.join(translated_chunks)
 
-    '''
-    # split into sentences to avoid input truncation on long audio
-    sentences = text.split('. ')
-    translated_chunks = []
-
-    for sentence in sentences:
-        if not sentence.strip():
-            continue
-        inputs = tokenizer(sentence, return_tensors="pt", padding=True, truncation=True, max_length=1024)
-        target_lang_id = tokenizer.convert_tokens_to_ids(target_lang)
-        outputs = lora_model.generate(
-            **inputs,
-            forced_bos_token_id=target_lang_id,
-            max_length=1024,
-            num_beams=4,
-            early_stopping=True,
-            no_repeat_ngram_size=3,
-        )
-        translated_chunks.append(tokenizer.batch_decode(outputs, skip_special_tokens=True)[0])
-
-    return ' '.join(translated_chunks)
-    '''
 
 print("Pipeline ready", file=sys.stderr)
 sys.stderr.flush()
@@ -166,10 +131,6 @@ for line in sys.stdin:
         request = json.loads(line.strip())
         audio_file = request.get("audio_file")
         text_input = request.get("text")
-        # text_input = request["text"]
-        # audio_file = request["audio_file"]
-        # source_lang = request["source_lang"]
-        # target_lang = request["target_lang"]
         source_lang = to_nllb_code(request["source_lang"])
         target_lang = to_nllb_code(request["target_lang"])
         output_file = request.get("output_file")
@@ -188,6 +149,7 @@ for line in sys.stdin:
             result = whisper_model.transcribe(audio_file, fp16=False, language=NLLB_TO_WHISPER.get(source_lang))
             full_text = str(result["text"]).strip()
             detected_lang = result["language"]
+            confidence = 1.0 if detected_lang == source_lang else round(result["language_probability"], 2)
             
 
         else:
@@ -198,9 +160,6 @@ for line in sys.stdin:
 
         # --- TTS (only if output_file exists) ---
         if output_file:
-            #gtts_lang = NLLB_TO_GTTS.get(target_lang, source_lang)
-            #tts = gTTS(text=translated_text, lang=gtts_lang)
-            #tts.save(output_file)
             mms_lang = NLLB_TO_MMS.get(target_lang, "en")
             synthesize(translated_text, mms_lang, output_file)
 
@@ -220,63 +179,4 @@ for line in sys.stdin:
         }
 
     print(json.dumps(response), flush=True)
-    '''
-    try:
-        request = json.loads(line.strip())
-        audio_file = request["audio_file"]
-        source_lang = request["source_lang"]
-        target_lang = request["target_lang"]
-        output_file = request.get("output_file")#output.mp3
-
-
-        if audio_file:
-            #audio_base64 = None
-            gtts_lang = NLLB_TO_GTTS.get(target_lang, "en")
-            tts = gTTS(text=translated_text, lang=gtts_lang)
-            tts.save(output_file)
-        else:
-            full_text = request.get("text", "")
-            detected_lang = source_lang
-            confidence = 1.0
-        
-        # Plain text language to codes
-        LANG_TO_CODE= {
-            "English" : "eng_Latn",
-            "Spanish" : "spa_Latn",
-            "Amharic" : "amh_Ethi",
-            "Uzbek" : "uzb_Latn"
-        }
-
-        # Transcribe
-        segments, info = whisper_model.transcribe(
-            audio_file,
-            beam_size=5,
-            condition_on_previous_text=False
-        )
-        full_text = " ".join([segment.text.strip() for segment in segments])
-
-        # Translate
-        translated_text = translate(full_text, source_lang, target_lang)
-
-        # Synthesize
-        gtts_lang = NLLB_TO_GTTS.get(target_lang, "en")
-        tts = gTTS(text=translated_text, lang=gtts_lang)
-        tts.save(output_file)
-
-        response = {
-            "status": "ok",
-            "transcription": full_text,
-            "translation": translated_text,
-            "output_file": output_file,
-            "detected_lang": info.language,
-            "confidence": round(info.language_probability, 2)
-        }
-
-    except Exception as e:
-        response = {
-            "status": "error",
-            "error": str(e)
-        }
-
-    print(json.dumps(response), flush=True)
-    '''
+    
