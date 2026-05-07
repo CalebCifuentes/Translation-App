@@ -16,31 +16,37 @@ class SpeechRecorder: NSObject, ObservableObject {
     private var engine = AVAudioEngine()
     private var file: AVAudioFile?
 
-    private var tempURL: URL {
-        FileManager.default.temporaryDirectory
-            .appendingPathComponent("recording.m4a")
-    }
-
+    // Replace the tempURL computed property with:
+    private var tempURL = FileManager.default.temporaryDirectory
+        .appendingPathComponent(UUID().uuidString + ".m4a")
+    
     func startRecording() throws {
         let session = AVAudioSession.sharedInstance()
-        try session.setCategory(.record, mode: .measurement)
+        try session.setCategory(.record, mode: .measurement, options: [])
         try session.setActive(true)
+
+        let input = engine.inputNode
+        let hwFormat = input.outputFormat(forBus: 0)  // use hardware's actual format
 
         let settings: [String: Any] = [
             AVFormatIDKey: kAudioFormatMPEG4AAC,
-            AVSampleRateKey: 16000,
-            AVNumberOfChannelsKey: 1
+            AVSampleRateKey: hwFormat.sampleRate,      // match hardware rate
+            AVNumberOfChannelsKey: hwFormat.channelCount
         ]
+        
+        // Generate a fresh URL each recording so stale data is never read back
+        tempURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString + ".m4a")
+        
         file = try AVAudioFile(forWriting: tempURL, settings: settings)
 
-        let input = engine.inputNode
-        input.installTap(onBus: 0, bufferSize: 4096,
-                         format: input.outputFormat(forBus: 0)) { [weak self] buf, _ in
+        input.installTap(onBus: 0, bufferSize: 4096, format: hwFormat) { [weak self] buf, _ in
             try? self?.file?.write(from: buf)
         }
         try engine.start()
         isRecording = true
     }
+    
 
     func stopRecording() -> Data? {
         engine.inputNode.removeTap(onBus: 0)

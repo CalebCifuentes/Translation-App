@@ -16,7 +16,7 @@ struct AppSettings {
     var hapticFeedback: Bool = true
     var showCharacterCount: Bool = true
     var defaultSourceLanguage: String = "English"
-    var defaultTargetLanguage: String = "Uzbek"
+    var defaultTargetLanguage: String = "Spanish"
     var transliterationEnabled: Bool = false
 }
 
@@ -167,7 +167,7 @@ struct SettingsView: View {
 struct ContentView: View {
     @State private var sourceText: String = ""
     @State private var sourceLanguage: String = "English"
-    @State private var targetLanguage: String = "Uzbek"
+    @State private var targetLanguage: String = "Spanish"
     @State private var isRecordingSource = false
     @State private var swapRotation: Double = 0
     @State private var isSaved = false
@@ -181,7 +181,14 @@ struct ContentView: View {
     var translatedText: String { translationService.translatedText }
     var isSpeaking: Bool { translationService.isSpeaking }
 
-    let languages = ["English", "Spanish", "Uzbek", "Amharic"]
+    let languageCodes: [String: String] = [
+        "English": "eng_Latn",
+        "Spanish": "spa_Latn",
+        "Uzbek":   "uzb_Latn",
+        "Amharic": "amh_Ethi"
+    ]
+    
+    var languages: [String] {Array(languageCodes.values).sorted()}
     let maxCharacters = 1000
 
     var body: some View {
@@ -194,7 +201,7 @@ struct ContentView: View {
 
                     // MARK: — Header
                     ZStack {
-                        Text("Translator")
+                        Text("EasyTranslate")
                             .font(.title2)
                             .fontWeight(.semibold)
                             .frame(maxWidth: .infinity, alignment: .center)
@@ -256,14 +263,29 @@ struct ContentView: View {
                                 .transition(.opacity)
                             }
                         }
-
+                        
+                        // edit start
                         ZStack(alignment: .topLeading) {
-                            if sourceText.isEmpty {
+                            if sourceText.isEmpty && translationService.transcribedText.isEmpty {
                                 Text("Type or tap the mic to speak…")
                                     .foregroundColor(Color(.placeholderText))
                                     .font(.system(size: settings.fontSize.size))
-                                    .padding(.top, 2)
+                                    .padding(.top, 8)
+                                    .padding(.leading, 5)          // match TextEditor's internal inset
+                                    .allowsHitTesting(false)       // taps pass through to TextEditor
                             }
+
+                            if !translationService.transcribedText.isEmpty && sourceText.isEmpty {
+                                Text("Type or tap the mic to speak…")
+                                    .font(.system(size: settings.fontSize.size))
+                                    .foregroundColor(.secondary)
+                                    .italic()
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .padding(.top, 8)
+                                    .padding(.leading, 5)
+                                    .allowsHitTesting(false)
+                            }
+
                             TextEditor(text: $sourceText)
                                 .frame(minHeight: 90, maxHeight: 160)
                                 .font(.system(size: settings.fontSize.size))
@@ -277,7 +299,9 @@ struct ContentView: View {
                                         translateText()
                                     }
                                 }
-                        }
+                        }    // edit end
+                        
+                        
 
                         if settings.showCharacterCount {
                             HStack {
@@ -297,7 +321,7 @@ struct ContentView: View {
                     
 
                     // MARK: — Translate & Mic Buttons
-                    HStack(spacing: 12) {
+                    HStack(spacing: 25) {
                         Button(action: {
                             if settings.hapticFeedback {
                                 UIImpactFeedbackGenerator(style: .medium).impactOccurred()
@@ -308,10 +332,10 @@ struct ContentView: View {
                                 .font(.body)
                                 .fontWeight(.medium)
                                 .frame(maxWidth: .infinity)
-                                .padding(.vertical, 14)
+                                .padding(.vertical, 20)
                                 .background(Color.accentColor)
                                 .foregroundColor(.white)
-                                .cornerRadius(13)
+                                .cornerRadius(30)
                         }
 
                         Button(action: {
@@ -323,8 +347,14 @@ struct ContentView: View {
                                 try? recorder.startRecording()
                             } else {
                                 if let audioData = recorder.stopRecording() {
-                                    translationService.connect(sourceLang: sourceLanguage,
-                                                               targetLang: targetLanguage)
+                                    guard let srcCode = languageCodes[sourceLanguage],
+                                          let targetCode = languageCodes[targetLanguage] else {
+                                         translationService.errorMessage = "Unsupported lanugage pair"
+                                        return
+                                    }
+                                    
+                                    translationService.connect(sourceLang: srcCode,
+                                                               targetLang: targetCode)
                                     translationService.sendAudio(audioData)
                                 }
                             }
@@ -337,7 +367,7 @@ struct ContentView: View {
                                             radius: 8, y: 3)
 
                                 Image(systemName: isRecordingSource ? "stop.fill" : "mic.fill")
-                                    .font(.system(size: 22, weight: .medium))
+                                    .font(.system(size: 25, weight: .medium))
                                     .foregroundColor(.white)
                             }
                         }
@@ -476,15 +506,15 @@ struct ContentView: View {
                                     UIImpactFeedbackGenerator(style: .light).impactOccurred()
                                 }
                             }) {
-                                Label(isSaved ? "Saved" : "Save",
-                                      systemImage: isSaved ? "bookmark.fill" : "bookmark")
-                                    .font(.subheadline)
-                                    .fontWeight(.medium)
-                                    .frame(maxWidth: .infinity)
-                                    .padding(.vertical, 9)
-                                    .background(Color(.secondarySystemBackground))
-                                    .foregroundColor(isSaved ? .orange : .primary)
-                                    .cornerRadius(10)
+                               // Label(isSaved ? "Saved" : "Save",
+                                //      systemImage: isSaved ? //"bookmark.fill" : "bookmark")
+                                  //  .font(.subheadline)
+                                 //   .fontWeight(.medium)
+                                 //   .frame(maxWidth: .infinity)
+                                 //   .padding(.vertical, 9)
+                                  //  .background(Color(.secondarySystemBackground))
+                                 //   .foregroundColor(isSaved ? .orange : .primary)
+                                 //   .cornerRadius(10)
                             }
                             .disabled(translatedText.isEmpty)
                         }
@@ -554,14 +584,20 @@ struct ContentView: View {
     func translateText() {
         guard !sourceText.isEmpty else { return }
         isSaved = false
+        
+        guard let srcCode = languageCodes[sourceLanguage],
+              let targetCode = languageCodes[targetLanguage] else {
+             translationService.errorMessage = "Unsupported lanugage pair"
+            return
+        }
 
-        translationService.connect(sourceLang: sourceLanguage,
-                                   targetLang: targetLanguage)
+        translationService.connect(sourceLang: srcCode, targetLang: targetCode)
+        
         Task {
             await translationService.translateText(sourceText,
-                                                   from: sourceLanguage,
-                                                   to: targetLanguage)
-        }
+                                                   from: srcCode,
+                                                   to: targetCode)
+        }  // corrected
     }
 
     func copyText() {
@@ -569,6 +605,7 @@ struct ContentView: View {
         UIPasteboard.general.string = translatedText
     }
 
+    
     func shareText() {
         guard !translatedText.isEmpty else { return }
         let av = UIActivityViewController(activityItems: [translatedText],
@@ -579,6 +616,7 @@ struct ContentView: View {
         }
     }
 }
+
 
 #Preview {
     ContentView()
