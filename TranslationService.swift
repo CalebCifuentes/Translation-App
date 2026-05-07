@@ -52,7 +52,7 @@ class TranslationService: NSObject, ObservableObject {
     // ── Config ────────────────────────────────────────────────────────
     // Use your Mac's LAN IP when testing on a real iPhone (not localhost)
     // Find it by running: ipconfig getifaddr en0
-    private let serverURL = URL(string: "wss://translation-app-production-d9dc.up.railway.app")!
+    private let serverURL = URL(string: "ws://192.168.0.107:8080")!
 
     override init() {
         super.init()
@@ -105,8 +105,28 @@ class TranslationService: NSObject, ObservableObject {
     func translateText(_ text: String,
                        from source: String,
                        to target: String) async {
-        // Placeholder — replace with HTTP endpoint if you add one
-        translatedText = "[Translated] \(text)"
+        guard let url = URL(string: "http://localhost:8080/translate-text") else { return }
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        
+        let body: [String: String] = [
+            "text": text,
+            "sourceLang": source,
+            "targetLang": target
+        ]
+        request.httpBody = try? JSONEncoder().encode(body)
+        
+        do {
+            let (data, _) = try await URLSession.shared.data(for: request)
+            if let response = try? JSONDecoder().decode([String: String].self, from: data),
+               let translation = response["translation"] {
+                translatedText = translation
+            }
+        } catch {
+            errorMessage = "Translation failed: \(error.localizedDescription)"
+        }
     }
 
     // MARK: Play Audio
